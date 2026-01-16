@@ -27,7 +27,17 @@ Make the script executable:
 chmod +x tools/agent_run.sh
 ```
 
-Update the repo checks section in `CONTRACT.md` to match your repo's lint/test/build commands.
+Configure your repo's check commands at the top of `tools/agent_run.sh`:
+
+```bash
+LINT_CMD="npm run lint"
+LINT_FIX_CMD="npm run lint:fix"
+TYPECHECK_CMD="npm run typecheck"
+TEST_CMD="npm test"
+BUILD_CMD="npm run build"
+```
+
+Set any command to `""` to skip that check.
 
 ## Usage
 
@@ -92,7 +102,6 @@ During execution, the agent creates:
 
 ## Customization
 
-Edit `CONTRACT.md` to:
-- Change repo check commands (lint, test, build)
-- Modify the workflow phases
-- Add repo-specific conventions
+- **Check commands**: Edit the config section at the top of `tools/agent_run.sh`
+- **Workflow phases**: Modify `.agent/CONTRACT.md` to change how the agent plans/implements
+- **Repo conventions**: Add repo-specific patterns to `CONTRACT.md` for the agent to follow

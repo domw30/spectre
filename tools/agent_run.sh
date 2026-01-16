@@ -117,7 +117,7 @@ Your task: Execute Phase 1 (Plan) for the spec at: $SPEC_FILE
 
 Do NOT implement anything yet. Only plan and document."
 
-    claude --print "$plan_prompt" || {
+    claude --print --dangerously-skip-permissions "$plan_prompt" || {
         log_error "Plan phase failed"
         exit 1
     }
@@ -150,7 +150,7 @@ After implementation, run these repo checks:$checks_prompt
 
 If checks fail, fix the issues and re-run until they pass."
 
-    claude --print "$implement_prompt" || {
+    claude --print --dangerously-skip-permissions "$implement_prompt" || {
         log_error "Implement phase failed"
         exit 1
     }
@@ -303,7 +303,7 @@ main() {
         log_warn "Checks failed - attempting Claude-assisted fix..."
         local checks_prompt
         checks_prompt=$(get_checks_prompt)
-        claude --print "Fix the failing repo checks. Run these checks and fix any errors:$checks_prompt"
+        claude --print --dangerously-skip-permissions "Fix the failing repo checks. Run these checks and fix any errors:$checks_prompt"
         run_checks || {
             log_error "Could not fix all check failures"
             log_info "Please fix manually and run: git add -A && git commit"

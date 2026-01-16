@@ -2,10 +2,13 @@
 #
 # spectre: Spec → PR Workflow
 #
-# Usage: ./tools/agent_run.sh [path-to-spec]
+# Usage: ./tools/agent_run.sh [options] [path-to-spec]
+#
+# Options:
+#   --continue    Continue on current branch (skip branch creation, update existing PR)
 #
 # This script automates the process of implementing a feature spec:
-# 1. Creates a timestamped git branch
+# 1. Creates a timestamped git branch (or continues on current branch)
 # 2. Runs Claude to plan the implementation
 # 3. Runs Claude to implement the feature
 # 4. Runs repo checks (lint, typecheck, test, build)
@@ -28,12 +31,36 @@ BUILD_CMD="npm run build"
 
 # ============================================================================
 
+# Parse arguments
+CONTINUE_MODE=false
+SPEC_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --continue)
+            CONTINUE_MODE=true
+            shift
+            ;;
+        *)
+            SPEC_FILE="$1"
+            shift
+            ;;
+    esac
+done
+
+# Default spec file if not provided
+SPEC_FILE="${SPEC_FILE:-.agent/spec.md}"
+
 # Configuration
-SPEC_FILE="${1:-.agent/spec.md}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 AGENT_DIR="$REPO_ROOT/.agent"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-BRANCH_NAME="agent/$TIMESTAMP"
+
+if [ "$CONTINUE_MODE" = true ]; then
+    BRANCH_NAME="$(git branch --show-current)"
+else
+    BRANCH_NAME="agent/$TIMESTAMP"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -74,6 +101,11 @@ check_prerequisites() {
 
 # Create git branch
 create_branch() {
+    if [ "$CONTINUE_MODE" = true ]; then
+        log_info "Continuing on current branch: $BRANCH_NAME"
+        return 0
+    fi
+
     log_info "Creating branch: $BRANCH_NAME"
 
     # Ensure we're on a clean state
@@ -106,7 +138,14 @@ get_checks_prompt() {
 run_plan_phase() {
     log_info "Running Plan phase..."
 
+    local context=""
+    if [ "$CONTINUE_MODE" = true ]; then
+        context="Note: This is a continuation of previous work. Review existing code and .agent/*.md files for context."
+    fi
+
     local plan_prompt="You are an autonomous repo agent. Read the CONTRACT at .agent/CONTRACT.md for your instructions.
+
+$context
 
 Your task: Execute Phase 1 (Plan) for the spec at: $SPEC_FILE
 
@@ -137,7 +176,14 @@ run_implement_phase() {
     local checks_prompt
     checks_prompt=$(get_checks_prompt)
 
+    local context=""
+    if [ "$CONTINUE_MODE" = true ]; then
+        context="Note: This is a continuation of previous work. Build upon existing implementation."
+    fi
+
     local implement_prompt="You are an autonomous repo agent. Read the CONTRACT at .agent/CONTRACT.md for your instructions.
+
+$context
 
 Your task: Execute Phase 2 (Implement) based on the plan at .agent/plan.md
 
@@ -217,8 +263,13 @@ commit_changes() {
     local spec_title
     spec_title=$(head -1 "$SPEC_FILE" | sed 's/^#* *//')
 
+    local commit_prefix="feat"
+    if [ "$CONTINUE_MODE" = true ]; then
+        commit_prefix="feat(continue)"
+    fi
+
     # Commit
-    git commit -m "feat: $spec_title
+    git commit -m "$commit_prefix: $spec_title
 
 Implemented via spectre workflow.
 
@@ -230,7 +281,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>" || {
     log_success "Changes committed"
 }
 
-# Create PR
+# Create or update PR
 create_pr() {
     log_info "Creating pull request..."
 
@@ -261,6 +312,23 @@ create_pr() {
         return 1
     }
 
+    # Check if PR already exists for this branch
+    if [ "$CONTINUE_MODE" = true ]; then
+        local existing_pr
+        existing_pr=$(gh pr list --head "$BRANCH_NAME" --json number --jq '.[0].number' 2>/dev/null || echo "")
+
+        if [ -n "$existing_pr" ]; then
+            log_info "Updating existing PR #$existing_pr"
+            if [ -f "$notes_file" ]; then
+                gh pr edit "$existing_pr" --body-file "$notes_file" || {
+                    log_warn "Failed to update PR body"
+                }
+            fi
+            log_success "PR #$existing_pr updated: $(gh pr view "$existing_pr" --json url --jq '.url')"
+            return 0
+        fi
+    fi
+
     # Create PR
     if [ -f "$notes_file" ]; then
         gh pr create --fill --body-file "$notes_file" || {
@@ -287,6 +355,9 @@ main() {
 
     log_info "Spec file: $SPEC_FILE"
     log_info "Branch: $BRANCH_NAME"
+    if [ "$CONTINUE_MODE" = true ]; then
+        log_info "Mode: Continue (iterating on existing work)"
+    fi
     echo ""
 
     # Change to repo root
@@ -320,4 +391,4 @@ main() {
 }
 
 # Run main
-main "$@"
+main

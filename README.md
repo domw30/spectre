@@ -74,6 +74,19 @@ The agent will:
 
 Review the generated PR, fix any remaining issues, and merge.
 
+### 4. Iterate (optional)
+
+To continue working on an existing branch (add functionality, fix issues, refine):
+
+```bash
+./tools/agent_run.sh --continue .agent/spec.md
+```
+
+This will:
+- Stay on the current branch (no new branch created)
+- Build upon existing code and `.agent/*.md` context
+- Update the existing PR instead of creating a new one
+
 ## Optional: Discovery Phase
 
 For complex tasks, run a discovery phase first to research the codebase:
